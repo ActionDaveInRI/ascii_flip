@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>ASCII Particle Fluid Simulation – Orientation Driven</title>
+    <title>ASCII Particle Fluid Simulation – Fast & Turbulent</title>
     <style>
       body { margin: 0; overflow: hidden; background: black; }
       canvas { display: block; }
@@ -38,47 +38,66 @@
       // Wrap the renderer with the ASCIIEffect.
       const effect = new THREE.AsciiEffect(renderer, ' .:-+*=%@#', { invert: true });
       effect.setSize(window.innerWidth, window.innerHeight);
-      effect.domElement.style.color = 'lime';
       effect.domElement.style.backgroundColor = 'black';
       document.body.appendChild(effect.domElement);
+      
+      // Function to compute boundaries (for the plane at z=0) based on camera settings.
+      function updateBoundaries() {
+        const distance = camera.position.z; // distance from camera to plane
+        const fovRad = THREE.MathUtils.degToRad(camera.fov);
+        const height = 2 * Math.tan(fovRad/2) * distance;
+        const width = height * camera.aspect;
+        return { left: -width/2, right: width/2, bottom: -height/2, top: height/2 };
+      }
+      
+      // Compute boundaries for particle initialization.
+      let boundaries = updateBoundaries();
       
       // Create a particle system.
       const particleCount = 2000;
       const geometry = new THREE.BufferGeometry();
       const positions = new Float32Array(particleCount * 3);
       const velocities = new Float32Array(particleCount * 3);
-      const range = 5;
+      const colors = new Float32Array(particleCount * 3);
       
-      // Initialize particles with random positions; start with zero velocity.
+      // Initialize particles within the computed boundaries.
       for (let i = 0; i < particleCount; i++) {
-          positions[i * 3]     = (Math.random() - 0.5) * range;
-          positions[i * 3 + 1] = (Math.random() - 0.5) * range;
-          positions[i * 3 + 2] = (Math.random() - 0.5) * range;
+          let x = Math.random() * (boundaries.right - boundaries.left) + boundaries.left;
+          let y = Math.random() * (boundaries.top - boundaries.bottom) + boundaries.bottom;
+          let z = (Math.random() - 0.5) * 0.5; // small Z variation
+          positions[i * 3]     = x;
+          positions[i * 3 + 1] = y;
+          positions[i * 3 + 2] = z;
           
+          // Start with zero velocity.
           velocities[i * 3]     = 0;
           velocities[i * 3 + 1] = 0;
           velocities[i * 3 + 2] = 0;
+          
+          // Gradient color based on position.
+          let normX = (x - boundaries.left) / (boundaries.right - boundaries.left);
+          let normY = (y - boundaries.bottom) / (boundaries.top - boundaries.bottom);
+          colors[i * 3]     = normX;              // Red from X
+          colors[i * 3 + 1] = normY;              // Green from Y
+          colors[i * 3 + 2] = 1 - (normX * normY);  // Blue for contrast
       }
       geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
       
-      // Points material – the ASCII effect will convert the scene to text.
-      const material = new THREE.PointsMaterial({ color: 0xffffff, size: 0.1 });
+      // Use a PointsMaterial with vertexColors enabled.
+      const material = new THREE.PointsMaterial({ vertexColors: true, size: 0.1 });
       const particles = new THREE.Points(geometry, material);
       scene.add(particles);
       
-      // Gravity vector (or target velocity) influenced by device orientation.
+      // Gravity vector (target velocity) driven by device orientation.
       let gravity = new THREE.Vector3(0, 0, 0);
       
-      // Orientation handler: apply stronger multipliers and invert Y so it pulls down.
+      // Orientation handler: apply a higher multiplier (0.05) and invert Y.
       function handleOrientation(event) {
-          // event.beta: front-to-back tilt (-180 to 180)
-          // event.gamma: left-to-right tilt (-90 to 90)
-          let beta  = event.beta  || 0;
-          let gamma = event.gamma || 0;
-          // Increase the multiplier for a stronger effect.
-          let gx = THREE.MathUtils.clamp(gamma / 90, -1, 1) * 0.01;
-          // Invert beta so tilting forward pulls particles downward.
-          let gy = -THREE.MathUtils.clamp(beta / 90, -1, 1) * 0.01;
+          let beta  = event.beta  || 0;   // front-to-back tilt (-180 to 180)
+          let gamma = event.gamma || 0;    // left-to-right tilt (-90 to 90)
+          let gx = THREE.MathUtils.clamp(gamma / 90, -1, 1) * 0.05;
+          let gy = -THREE.MathUtils.clamp(beta / 90, -1, 1) * 0.05; // invert Y so tilting forward pulls down
           gravity.set(gx, gy, 0);
       }
       
@@ -100,7 +119,7 @@
           }
       }
       
-      // Add a big button to request sensor access.
+      // Show a large button for sensor access if required.
       if (typeof DeviceOrientationEvent !== 'undefined' &&
           typeof DeviceOrientationEvent.requestPermission === 'function') {
           const button = document.createElement('button');
@@ -118,33 +137,40 @@
       // Animation loop.
       function animate() {
           requestAnimationFrame(animate);
+          // Update boundaries (in case of window resizing).
+          boundaries = updateBoundaries();
           const positionsAttr = particles.geometry.attributes.position.array;
           for (let i = 0; i < particleCount; i++) {
-              // Interpolate particle velocity toward the current gravity vector more quickly.
-              velocities[i * 3]     = THREE.MathUtils.lerp(velocities[i * 3], gravity.x, 0.5);
-              velocities[i * 3 + 1] = THREE.MathUtils.lerp(velocities[i * 3 + 1], gravity.y, 0.5);
-              velocities[i * 3 + 2] = THREE.MathUtils.lerp(velocities[i * 3 + 2], gravity.z, 0.5);
+              // Interpolate each particle's velocity toward the current gravity vector faster (lerp factor 0.7).
+              velocities[i * 3]     = THREE.MathUtils.lerp(velocities[i * 3], gravity.x, 0.7);
+              velocities[i * 3 + 1] = THREE.MathUtils.lerp(velocities[i * 3 + 1], gravity.y, 0.7);
+              velocities[i * 3 + 2] = THREE.MathUtils.lerp(velocities[i * 3 + 2], gravity.z, 0.7);
               
-              // Add a small random turbulence for extra choppiness.
-              let turbulence = 0.002;
+              // Increase turbulence for more chaotic motion.
+              const turbulence = 0.005;
               velocities[i * 3]     += (Math.random() - 0.5) * turbulence;
               velocities[i * 3 + 1] += (Math.random() - 0.5) * turbulence;
               velocities[i * 3 + 2] += (Math.random() - 0.5) * turbulence;
               
-              // Update particle positions.
+              // Update positions.
               positionsAttr[i * 3]     += velocities[i * 3];
               positionsAttr[i * 3 + 1] += velocities[i * 3 + 1];
               positionsAttr[i * 3 + 2] += velocities[i * 3 + 2];
               
-              // Reverse velocity on boundary contact.
-              if (positionsAttr[i * 3] < -range/2 || positionsAttr[i * 3] > range/2) {
+              // Bounce off the walls (X and Y boundaries).
+              if (positionsAttr[i * 3] < boundaries.left) {
+                  positionsAttr[i * 3] = boundaries.left;
+                  velocities[i * 3] = -velocities[i * 3];
+              } else if (positionsAttr[i * 3] > boundaries.right) {
+                  positionsAttr[i * 3] = boundaries.right;
                   velocities[i * 3] = -velocities[i * 3];
               }
-              if (positionsAttr[i * 3 + 1] < -range/2 || positionsAttr[i * 3 + 1] > range/2) {
+              if (positionsAttr[i * 3 + 1] < boundaries.bottom) {
+                  positionsAttr[i * 3 + 1] = boundaries.bottom;
                   velocities[i * 3 + 1] = -velocities[i * 3 + 1];
-              }
-              if (positionsAttr[i * 3 + 2] < -range/2 || positionsAttr[i * 3 + 2] > range/2) {
-                  velocities[i * 3 + 2] = -velocities[i * 3 + 2];
+              } else if (positionsAttr[i * 3 + 1] > boundaries.top) {
+                  positionsAttr[i * 3 + 1] = boundaries.top;
+                  velocities[i * 3 + 1] = -velocities[i * 3 + 1];
               }
           }
           particles.geometry.attributes.position.needsUpdate = true;
@@ -152,7 +178,7 @@
       }
       animate();
       
-      // Handle window resizing.
+      // Update renderer and effect on window resize.
       window.addEventListener('resize', () => {
           camera.aspect = window.innerWidth / window.innerHeight;
           camera.updateProjectionMatrix();
