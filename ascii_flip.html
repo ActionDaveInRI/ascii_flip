@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>ASCII Particle Fluid Simulation with Orientation Emphasis</title>
+    <title>ASCII Particle Fluid Simulation – Orientation Driven</title>
     <style>
       body { margin: 0; overflow: hidden; background: black; }
       canvas { display: block; }
@@ -29,7 +29,7 @@
     <script>
       // Set up scene, camera, and renderer.
       const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
       camera.position.z = 5;
       
       const renderer = new THREE.WebGLRenderer();
@@ -38,7 +38,7 @@
       // Wrap the renderer with the ASCIIEffect.
       const effect = new THREE.AsciiEffect(renderer, ' .:-+*=%@#', { invert: true });
       effect.setSize(window.innerWidth, window.innerHeight);
-      effect.domElement.style.color = 'lime'; // ASCII text color
+      effect.domElement.style.color = 'lime';
       effect.domElement.style.backgroundColor = 'black';
       document.body.appendChild(effect.domElement);
       
@@ -47,10 +47,9 @@
       const geometry = new THREE.BufferGeometry();
       const positions = new Float32Array(particleCount * 3);
       const velocities = new Float32Array(particleCount * 3);
-      const range = 5; // simulation area
+      const range = 5;
       
-      // Initialize particles with random positions.
-      // Set initial velocities to zero so only orientation drives motion.
+      // Initialize particles with random positions; start with zero velocity.
       for (let i = 0; i < particleCount; i++) {
           positions[i * 3]     = (Math.random() - 0.5) * range;
           positions[i * 3 + 1] = (Math.random() - 0.5) * range;
@@ -62,29 +61,28 @@
       }
       geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
       
-      // Use a PointsMaterial. The ASCII effect will transform the rendering.
+      // Points material – the ASCII effect will convert the scene to text.
       const material = new THREE.PointsMaterial({ color: 0xffffff, size: 0.1 });
       const particles = new THREE.Points(geometry, material);
       scene.add(particles);
       
-      // Gravity vector influenced by device orientation.
-      // (This is the target velocity that particles will gradually approach.)
+      // Gravity vector (or target velocity) influenced by device orientation.
       let gravity = new THREE.Vector3(0, 0, 0);
       
-      // Orientation handler: update gravity based on beta (front-to-back tilt) and gamma (left-to-right tilt).
+      // Orientation handler: apply stronger multipliers and invert Y so it pulls down.
       function handleOrientation(event) {
-          console.log("Orientation event:", event.beta, event.gamma);
           // event.beta: front-to-back tilt (-180 to 180)
           // event.gamma: left-to-right tilt (-90 to 90)
           let beta  = event.beta  || 0;
           let gamma = event.gamma || 0;
-          // Emphasize orientation influence by using a higher multiplier.
-          let gx = THREE.MathUtils.clamp(gamma / 90, -1, 1) * 0.005;
-          let gy = THREE.MathUtils.clamp(beta / 90, -1, 1) * 0.005;
+          // Increase the multiplier for a stronger effect.
+          let gx = THREE.MathUtils.clamp(gamma / 90, -1, 1) * 0.01;
+          // Invert beta so tilting forward pulls particles downward.
+          let gy = -THREE.MathUtils.clamp(beta / 90, -1, 1) * 0.01;
           gravity.set(gx, gy, 0);
       }
       
-      // Request permission for device orientation if needed (iOS 13+)
+      // Request permission for device orientation if needed (iOS 13+).
       function enableMotion() {
           if (typeof DeviceOrientationEvent !== 'undefined' &&
               typeof DeviceOrientationEvent.requestPermission === 'function') {
@@ -102,7 +100,7 @@
           }
       }
       
-      // Show a large button for enabling sensor access if required.
+      // Add a big button to request sensor access.
       if (typeof DeviceOrientationEvent !== 'undefined' &&
           typeof DeviceOrientationEvent.requestPermission === 'function') {
           const button = document.createElement('button');
@@ -117,23 +115,28 @@
           window.addEventListener("deviceorientation", handleOrientation, true);
       }
       
-      // Animation loop: update particle positions.
-      // Instead of accumulating gravity as an acceleration, each particle's velocity is interpolated toward the gravity vector.
+      // Animation loop.
       function animate() {
           requestAnimationFrame(animate);
           const positionsAttr = particles.geometry.attributes.position.array;
           for (let i = 0; i < particleCount; i++) {
-              // Smoothly set velocity to be more directly the orientation sensor's output.
-              velocities[i * 3]     = THREE.MathUtils.lerp(velocities[i * 3], gravity.x, 0.2);
-              velocities[i * 3 + 1] = THREE.MathUtils.lerp(velocities[i * 3 + 1], gravity.y, 0.2);
-              velocities[i * 3 + 2] = THREE.MathUtils.lerp(velocities[i * 3 + 2], gravity.z, 0.2);
+              // Interpolate particle velocity toward the current gravity vector more quickly.
+              velocities[i * 3]     = THREE.MathUtils.lerp(velocities[i * 3], gravity.x, 0.5);
+              velocities[i * 3 + 1] = THREE.MathUtils.lerp(velocities[i * 3 + 1], gravity.y, 0.5);
+              velocities[i * 3 + 2] = THREE.MathUtils.lerp(velocities[i * 3 + 2], gravity.z, 0.5);
               
-              // Update positions.
+              // Add a small random turbulence for extra choppiness.
+              let turbulence = 0.002;
+              velocities[i * 3]     += (Math.random() - 0.5) * turbulence;
+              velocities[i * 3 + 1] += (Math.random() - 0.5) * turbulence;
+              velocities[i * 3 + 2] += (Math.random() - 0.5) * turbulence;
+              
+              // Update particle positions.
               positionsAttr[i * 3]     += velocities[i * 3];
               positionsAttr[i * 3 + 1] += velocities[i * 3 + 1];
               positionsAttr[i * 3 + 2] += velocities[i * 3 + 2];
               
-              // Simple boundaries: reverse velocity if a particle leaves the area.
+              // Reverse velocity on boundary contact.
               if (positionsAttr[i * 3] < -range/2 || positionsAttr[i * 3] > range/2) {
                   velocities[i * 3] = -velocities[i * 3];
               }
@@ -149,7 +152,7 @@
       }
       animate();
       
-      // Adjust renderer size on window resize.
+      // Handle window resizing.
       window.addEventListener('resize', () => {
           camera.aspect = window.innerWidth / window.innerHeight;
           camera.updateProjectionMatrix();
