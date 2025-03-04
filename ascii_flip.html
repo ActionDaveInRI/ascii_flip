@@ -2,10 +2,10 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>ASCII Particle Fluid Simulation – Fast & Turbulent</title>
+    <title>ASCII Particle Fluid Simulation – Fast, Turbulent & Walled</title>
     <style>
       body { margin: 0; overflow: hidden; background: black; }
-      canvas { display: block; }
+      canvas, pre { display: block; }
       #enableButton {
         position: absolute;
         top: 20px;
@@ -38,10 +38,12 @@
       // Wrap the renderer with the ASCIIEffect.
       const effect = new THREE.AsciiEffect(renderer, ' .:-+*=%@#', { invert: true });
       effect.setSize(window.innerWidth, window.innerHeight);
+      // Force white text so something shows up even if vertex colors are ignored.
+      effect.domElement.style.color = "#FFF";
       effect.domElement.style.backgroundColor = 'black';
       document.body.appendChild(effect.domElement);
       
-      // Function to compute boundaries (for the plane at z=0) based on camera settings.
+      // Function to compute the boundaries for the plane at z = 0 based on camera settings.
       function updateBoundaries() {
         const distance = camera.position.z; // distance from camera to plane
         const fovRad = THREE.MathUtils.degToRad(camera.fov);
@@ -61,6 +63,8 @@
       const colors = new Float32Array(particleCount * 3);
       
       // Initialize particles within the computed boundaries.
+      // Colors are derived from positions (gradient) but note that the default ASCII effect
+      // will render all characters in the forced text color.
       for (let i = 0; i < particleCount; i++) {
           let x = Math.random() * (boundaries.right - boundaries.left) + boundaries.left;
           let y = Math.random() * (boundaries.top - boundaries.bottom) + boundaries.bottom;
@@ -77,9 +81,9 @@
           // Gradient color based on position.
           let normX = (x - boundaries.left) / (boundaries.right - boundaries.left);
           let normY = (y - boundaries.bottom) / (boundaries.top - boundaries.bottom);
-          colors[i * 3]     = normX;              // Red from X
-          colors[i * 3 + 1] = normY;              // Green from Y
-          colors[i * 3 + 2] = 1 - (normX * normY);  // Blue for contrast
+          colors[i * 3]     = normX;              
+          colors[i * 3 + 1] = normY;              
+          colors[i * 3 + 2] = 1 - (normX * normY);  
       }
       geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
       geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -89,15 +93,15 @@
       const particles = new THREE.Points(geometry, material);
       scene.add(particles);
       
-      // Gravity vector (target velocity) driven by device orientation.
+      // Gravity (or target velocity) vector driven by device orientation.
       let gravity = new THREE.Vector3(0, 0, 0);
       
-      // Orientation handler: apply a higher multiplier (0.05) and invert Y.
+      // Orientation handler: apply a high multiplier (0.05) and invert Y so tilting forward pulls particles downward.
       function handleOrientation(event) {
           let beta  = event.beta  || 0;   // front-to-back tilt (-180 to 180)
           let gamma = event.gamma || 0;    // left-to-right tilt (-90 to 90)
           let gx = THREE.MathUtils.clamp(gamma / 90, -1, 1) * 0.05;
-          let gy = -THREE.MathUtils.clamp(beta / 90, -1, 1) * 0.05; // invert Y so tilting forward pulls down
+          let gy = -THREE.MathUtils.clamp(beta / 90, -1, 1) * 0.05;
           gravity.set(gx, gy, 0);
       }
       
@@ -119,7 +123,7 @@
           }
       }
       
-      // Show a large button for sensor access if required.
+      // Add a large button to request sensor access if required.
       if (typeof DeviceOrientationEvent !== 'undefined' &&
           typeof DeviceOrientationEvent.requestPermission === 'function') {
           const button = document.createElement('button');
@@ -141,7 +145,7 @@
           boundaries = updateBoundaries();
           const positionsAttr = particles.geometry.attributes.position.array;
           for (let i = 0; i < particleCount; i++) {
-              // Interpolate each particle's velocity toward the current gravity vector faster (lerp factor 0.7).
+              // Interpolate each particle's velocity toward the current gravity vector (faster with a lerp factor of 0.7).
               velocities[i * 3]     = THREE.MathUtils.lerp(velocities[i * 3], gravity.x, 0.7);
               velocities[i * 3 + 1] = THREE.MathUtils.lerp(velocities[i * 3 + 1], gravity.y, 0.7);
               velocities[i * 3 + 2] = THREE.MathUtils.lerp(velocities[i * 3 + 2], gravity.z, 0.7);
@@ -157,7 +161,7 @@
               positionsAttr[i * 3 + 1] += velocities[i * 3 + 1];
               positionsAttr[i * 3 + 2] += velocities[i * 3 + 2];
               
-              // Bounce off the walls (X and Y boundaries).
+              // Bounce off walls in the X–Y plane.
               if (positionsAttr[i * 3] < boundaries.left) {
                   positionsAttr[i * 3] = boundaries.left;
                   velocities[i * 3] = -velocities[i * 3];
