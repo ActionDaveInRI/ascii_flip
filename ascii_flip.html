@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>ASCII Fluid Particle Simulation – Fluid with Repulsion</title>
+    <title>ASCII Fluid Particle Simulation – Dynamic Colors with Repulsion</title>
     <style>
       body { margin: 0; overflow: hidden; background: black; }
       canvas, pre { display: block; }
@@ -27,11 +27,9 @@
     <!-- Include AsciiEffect -->
     <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/effects/AsciiEffect.js" crossorigin="anonymous"></script>
     <script>
-      // Set up scene, camera, and renderer.
+      // Basic scene setup.
       const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(
-        75, window.innerWidth / window.innerHeight, 0.1, 1000
-      );
+      const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
       camera.position.z = 5;
       
       const renderer = new THREE.WebGLRenderer();
@@ -40,66 +38,65 @@
       // ASCII effect wrapper.
       const effect = new THREE.AsciiEffect(renderer, ' .:-+*=%@#', { invert: true });
       effect.setSize(window.innerWidth, window.innerHeight);
-      // Let the underlying vertex colors show.
+      // Do not force a single text color—this version should let vertex colors (if supported) show.
       effect.domElement.style.backgroundColor = 'black';
       document.body.appendChild(effect.domElement);
       
-      // Function to compute visible boundaries (plane at z=0) from camera settings.
+      // Compute visible boundaries on the X–Y plane at z=0.
       function updateBoundaries() {
         const distance = camera.position.z;
         const fovRad = THREE.MathUtils.degToRad(camera.fov);
         const height = 2 * Math.tan(fovRad / 2) * distance;
         const width = height * camera.aspect;
-        return { left: -width / 2, right: width / 2, bottom: -height / 2, top: height / 2 };
+        return { left: -width/2, right: width/2, bottom: -height/2, top: height/2 };
       }
       let boundaries = updateBoundaries();
       
-      // Create a particle system.
-      const particleCount = 500; // Reduced count for repulsion loop performance.
+      // Particle system setup.
+      const particleCount = 500; // Reduced for repulsion performance.
       const geometry = new THREE.BufferGeometry();
       const positions = new Float32Array(particleCount * 3);
       const velocities = new Float32Array(particleCount * 3);
       const colors = new Float32Array(particleCount * 3);
       
-      // Initialize particles: positions within boundaries, slight random z, small random velocity,
-      // and initial color gradient based on position.
+      // Initialize particles inside boundaries.
       for (let i = 0; i < particleCount; i++) {
           let x = Math.random() * (boundaries.right - boundaries.left) + boundaries.left;
           let y = Math.random() * (boundaries.top - boundaries.bottom) + boundaries.bottom;
-          let z = (Math.random() - 0.5) * 0.5;
-          positions[i * 3] = x;
-          positions[i * 3 + 1] = y;
-          positions[i * 3 + 2] = z;
+          let z = (Math.random() - 0.5) * 0.5; // slight Z variation
+          positions[i*3]     = x;
+          positions[i*3+1]   = y;
+          positions[i*3+2]   = z;
           
-          // Start with a very small random initial velocity.
-          velocities[i * 3] = (Math.random() - 0.5) * 0.005;
-          velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.005;
-          velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.005;
+          // Start with a tiny random initial velocity.
+          velocities[i*3]     = (Math.random() - 0.5) * 0.005;
+          velocities[i*3+1]   = (Math.random() - 0.5) * 0.005;
+          velocities[i*3+2]   = (Math.random() - 0.5) * 0.005;
           
-          // Color gradient based on position.
+          // Initial gradient color based on position.
           let normX = (x - boundaries.left) / (boundaries.right - boundaries.left);
           let normY = (y - boundaries.bottom) / (boundaries.top - boundaries.bottom);
-          colors[i * 3] = normX;
-          colors[i * 3 + 1] = normY;
-          colors[i * 3 + 2] = 1 - (normX * normY);
+          colors[i*3]     = normX;
+          colors[i*3+1]   = normY;
+          colors[i*3+2]   = 1 - (normX * normY);
       }
       geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
       geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
       
-      // Use a PointsMaterial with vertexColors enabled.
+      // Use a PointsMaterial that supports vertex colors.
       const material = new THREE.PointsMaterial({ vertexColors: true, size: 0.1 });
       const particles = new THREE.Points(geometry, material);
       scene.add(particles);
       
-      // Gravity (target velocity) vector driven by device orientation.
+      // Global gravity (target velocity) from device orientation.
       let gravity = new THREE.Vector3(0, 0, 0);
       
-      // Orientation handler: use a high multiplier (0.05) and invert Y.
+      // Orientation handler: high multiplier and inverted Y.
       function handleOrientation(event) {
-          let beta  = event.beta || 0;    // front-to-back tilt (-180 to 180)
+          let beta  = event.beta || 0;   // front-to-back tilt (-180 to 180)
           let gamma = event.gamma || 0;    // left-to-right tilt (-90 to 90)
-          let gx = THREE.MathUtils.clamp(gamma / 90, -1, 1) * 0.05;
-          let gy = -THREE.MathUtils.clamp(beta / 90, -1, 1) * 0.05;
+          let gx = THREE.MathUtils.clamp(gamma/90, -1, 1) * 0.05;
+          let gy = -THREE.MathUtils.clamp(beta/90, -1, 1) * 0.05;
           gravity.set(gx, gy, 0);
       }
       
@@ -121,7 +118,6 @@
           }
       }
       
-      // Show a large button for sensor access if required.
       if (typeof DeviceOrientationEvent !== 'undefined' &&
           typeof DeviceOrientationEvent.requestPermission === 'function') {
           const button = document.createElement('button');
@@ -136,7 +132,7 @@
           window.addEventListener("deviceorientation", handleOrientation, true);
       }
       
-      // Animation loop.
+      let frameCount = 0;
       function animate() {
           requestAnimationFrame(animate);
           const t = performance.now() * 0.001; // time in seconds
@@ -145,21 +141,21 @@
           
           // Update velocities and positions.
           for (let i = 0; i < particleCount; i++) {
-              // Add a swirling force based on time and particle position.
+              // Compute a swirling force based on time and particle position.
               let swirlX = Math.sin(t + positionsAttr[i * 3 + 1] * 10) * 0.01;
               let swirlY = Math.cos(t + positionsAttr[i * 3] * 10) * 0.01;
               
-              // Interpolate velocity toward (gravity + swirl) with moderate inertia.
+              // Blend current velocity toward (gravity + swirl).
               velocities[i * 3] = THREE.MathUtils.lerp(velocities[i * 3], gravity.x + swirlX, 0.3);
               velocities[i * 3 + 1] = THREE.MathUtils.lerp(velocities[i * 3 + 1], gravity.y + swirlY, 0.3);
-              velocities[i * 3 + 2] = THREE.MathUtils.lerp(velocities[i * 3 + 2], gravity.z, 0.3) + (Math.random() - 0.5) * 0.005;
+              velocities[i * 3 + 2] = THREE.MathUtils.lerp(velocities[i * 3 + 2], gravity.z, 0.3) + (Math.random()-0.5)*0.005;
               
               // Update positions.
               positionsAttr[i * 3] += velocities[i * 3];
               positionsAttr[i * 3 + 1] += velocities[i * 3 + 1];
               positionsAttr[i * 3 + 2] += velocities[i * 3 + 2];
               
-              // Bounce off the walls (X–Y boundaries).
+              // Bounce off X–Y walls.
               if (positionsAttr[i * 3] < boundaries.left) {
                   positionsAttr[i * 3] = boundaries.left;
                   velocities[i * 3] = -velocities[i * 3];
@@ -176,8 +172,7 @@
               }
           }
           
-          // --- Repulsion step: enforce "personal space" ---
-          // For every pair of particles, if they get too close, apply a repulsive force.
+          // Repulsion: enforce "personal space" between particles.
           const repulsionDistance = 0.15;
           const repulsionFactor = 0.01;
           for (let i = 0; i < particleCount; i++) {
@@ -191,7 +186,6 @@
                       let fx = (dx / dist) * force;
                       let fy = (dy / dist) * force;
                       let fz = (dz / dist) * force;
-                      // Apply equal and opposite forces.
                       velocities[i * 3]     += fx;
                       velocities[i * 3 + 1] += fy;
                       velocities[i * 3 + 2] += fz;
@@ -202,20 +196,22 @@
               }
           }
           
-          // Dynamic color update: shift colors over time for a fluid look.
-          for (let i = 0; i < particleCount; i++) {
-              colors[i * 3] = 0.5 + 0.5 * Math.sin(t + positionsAttr[i * 3]);
-              colors[i * 3 + 1] = 0.5 + 0.5 * Math.sin(t + positionsAttr[i * 3 + 1]);
-              colors[i * 3 + 2] = 0.5 + 0.5 * Math.sin(t + positionsAttr[i * 3 + 2]);
+          // Update colors every 10 frames to reduce overhead.
+          frameCount++;
+          if(frameCount % 10 === 0) {
+              for (let i = 0; i < particleCount; i++) {
+                  colors[i * 3]     = 0.5 + 0.5 * Math.sin(t + positionsAttr[i * 3]);
+                  colors[i * 3 + 1] = 0.5 + 0.5 * Math.sin(t + positionsAttr[i * 3 + 1]);
+                  colors[i * 3 + 2] = 0.5 + 0.5 * Math.sin(t + positionsAttr[i * 3 + 2]);
+              }
+              particles.geometry.attributes.color.needsUpdate = true;
           }
           
           particles.geometry.attributes.position.needsUpdate = true;
-          particles.geometry.attributes.color.needsUpdate = true;
           effect.render(scene, camera);
       }
       animate();
       
-      // Handle window resizing.
       window.addEventListener('resize', () => {
           camera.aspect = window.innerWidth / window.innerHeight;
           camera.updateProjectionMatrix();
